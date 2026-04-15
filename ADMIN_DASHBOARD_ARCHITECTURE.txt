@@ -1,0 +1,287 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║              ADMIN DASHBOARD - ARCHITECTURE & DATA FLOW                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           USER INTERFACE LAYER                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  DashboardLayout (Main Wrapper)                                     │   │
+│  │  ├─ Sidebar (Navigation)                                            │   │
+│  │  ├─ Topbar (Header)                                                 │   │
+│  │  └─ <Outlet /> (Page Content)                                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                           ▼                ▼                ▼                │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐         │
+│  │  Dashboard Home  │  │  Appointments    │  │  Customers       │         │
+│  │                  │  │                  │  │                  │         │
+│  │ ┌──────────────┐ │  │ ┌──────────────┐│  │ ┌──────────────┐ │         │
+│  │ │ StatsGrid    │ │  │ │ FilterBar    ││  │ │ FilterBar    │ │         │
+│  │ │ (4 cards)    │ │  │ │              ││  │ │              │ │         │
+│  │ └──────────────┘ │  │ └──────────────┘│  │ └──────────────┘ │         │
+│  │                  │  │ ┌──────────────┐│  │                  │         │
+│  │ ┌──────────────┐ │  │ │ DataTable    ││  │ ┌──────────────┐ │         │
+│  │ │ RevenueChart │ │  │ │ (sortable)   ││  │ │ DataTable    │ │         │
+│  │ │ (Line)       │ │  │ │              ││  │ │ (7 columns)  │ │         │
+│  │ └──────────────┘ │  │ └──────────────┘│  │ └──────────────┘ │         │
+│  │                  │  │                  │  │                  │         │
+│  │ ┌──────────────┐ │  │ ┌──────────────┐│  │ ┌──────────────┐ │         │
+│  │ │   Charts     │ │  │ │ Confirm      ││  │ │ Pagination   │ │         │
+│  │ │  + Tables    │ │  │ │ Dialog       ││  │ │              │ │         │
+│  │ └──────────────┘ │  │ └──────────────┘│  │ └──────────────┘ │         │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘         │
+│                                                                              │
+│  ┌──────────────────┐                                                      │
+│  │  Staff           │                                                      │
+│  │                  │                                                      │
+│  │ ┌──────────────┐ │                                                      │
+│  │ │ FilterBar    │ │                                                      │
+│  │ └──────────────┘ │                                                      │
+│  │ ┌──────────────┐ │                                                      │
+│  │ │ DataTable    │ │                                                      │
+│  │ │ (7 columns)  │ │                                                      │
+│  │ └──────────────┘ │                                                      │
+│  └──────────────────┘                                                      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         COMPONENT LAYER                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │  Stats          │  │  Tables         │  │  Charts         │            │
+│  │  Components     │  │  Components     │  │  Components     │            │
+│  │                 │  │                 │  │                 │            │
+│  │ • StatCard      │  │ • DataTable     │  │ • RevenueChart  │            │
+│  │ • StatsGrid     │  │ • RecentAppts   │  │ • AppointChart  │            │
+│  │ • QuickInsights │  │ • TopServices   │  │                 │            │
+│  │                 │  │ • TopStaff      │  │                 │            │
+│  │                 │  │ • Pagination    │  │                 │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│                                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │  Form           │  │  Modal          │  │  Alert          │            │
+│  │  Components     │  │  Components     │  │  Components     │            │
+│  │                 │  │                 │  │                 │            │
+│  │ • FilterBar     │  │ • ConfirmDialog │  │ • AlertBanner   │            │
+│  │                 │  │                 │  │                 │            │
+│  │                 │  │                 │  │ ┌─────────────┐ │            │
+│  │                 │  │                 │  │ │ EmptyState  │ │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           STATE MANAGEMENT LAYER                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ CUSTOM HOOKS (src/hooks/useDashboard.js)                              │ │
+│  │                                                                       │ │
+│  │ useFilters()          useSorting()           usePagination()        │ │
+│  │ ├─ filters{}          ├─ sortKey             ├─ currentPage        │ │
+│  │ ├─ updateFilter()     ├─ sortOrder           ├─ totalPages         │ │
+│  │ └─ resetFilters()     ├─ sortedItems         ├─ currentItems       │ │
+│  │                       └─ toggleSort()        ├─ goToPage()         │ │
+│  │                                             ├─ nextPage()         │ │
+│  │ useModal()            useLoading()          ├─ prevPage()         │ │
+│  │ ├─ isOpen             ├─ isLoading          └─────────────────── │ │
+│  │ ├─ open()             ├─ startLoading()                           │ │
+│  │ ├─ close()            └─ stopLoading()      useNotification()    │ │
+│  │ └─ toggle()                                 ├─ notifications[]    │ │
+│  │                                             ├─ addNotification()  │ │
+│  │                                             └─ removeNotification()
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              UTILITIES LAYER                                 │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────────┐  ┌──────────────────────────┐               │
+│  │ dashboardHelpers.js      │  │ dashboardApi.js          │               │
+│  │                          │  │                          │               │
+│  │ Formatting:              │  │ API Calls (Mock):        │               │
+│  │ • formatCurrency()       │  │ • getAppointmentById()   │               │
+│  │ • formatDate()           │  │ • getAllCustomers()      │               │
+│  │ • formatTime()           │  │ • getAllStaff()          │               │
+│  │ • truncateText()         │  │ • getAllServices()       │               │
+│  │ • getInitials()          │  │ • getAllAppointments()   │               │
+│  │                          │  │ • createBooking()        │               │
+│  │ Validation:              │  │ • updateBookingStatus()  │               │
+│  │ • isValidEmail()         │  │ • cancelAppointment()    │               │
+│  │ • isValidPhone()         │  │ • getDashboardMetrics()  │               │
+│  │                          │  │                          │               │
+│  │ Status Colors:           │  │ Ready to connect to:     │               │
+│  │ • getStatusBadgeColor()  │  │ ✓ Backend API            │               │
+│  │                          │  │ ✓ Real database          │               │
+│  │ Array Operations:        │  │ ✓ External services      │               │
+│  │ • sortByKey()            │  │                          │               │
+│  │ • filterByCriteria()     │  │                          │               │
+│  │ • calculatePercentage()  │  │                          │               │
+│  └──────────────────────────┘  └──────────────────────────┘               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              DATA LAYER                                       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ dashboardData.js (Mock Data)                                        │   │
+│  │                                                                     │   │
+│  │ ├─ dashboardStats (4 KPI cards with trends)                       │   │
+│  │ ├─ appointments (5 sample appointments)                           │   │
+│  │ ├─ chartData (6 months revenue)                                   │   │
+│  │ ├─ appointmentsTrendData (trend data)                             │   │
+│  │ ├─ topServices (4 top services)                                   │   │
+│  │ ├─ topStaff (4 top staff members)                                 │   │
+│  │ ├─ quickInsights (4 insights)                                     │   │
+│  │ └─ dashboardMenu (8 menu items)                                   │   │
+│  │                                                                     │   │
+│  │ Ready to be replaced with:                                         │   │
+│  │ ✓ Backend API responses                                            │   │
+│  │ ✓ Real database queries                                            │   │
+│  │ ✓ External data sources                                            │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                            DATA FLOW EXAMPLE
+═══════════════════════════════════════════════════════════════════════════════
+
+1. USER INTERACTS WITH UI
+   └─> Clicks filter dropdown or sorts table
+
+
+2. COMPONENT HANDLES EVENT
+   └─> FilterBar's onChange triggers updateFilter()
+
+
+3. HOOK UPDATES STATE
+   └─> useFilters() updates filters object
+
+
+4. COMPONENT RE-RENDERS
+   └─> DataTable receives new filtered data
+
+
+5. HELPER FUNCTION FORMATS DATA
+   └─> formatDate(), getStatusBadgeColor() etc.
+
+
+6. DISPLAY UPDATES
+   └─> User sees new filtered/sorted results
+
+
+Example Flow:
+─────────────
+
+User clicks: "Filter by Confirmed"
+    ↓
+FilterBar.onChange triggers: updateFilter('status', 'Confirmed')
+    ↓
+useFilters hook updates state: filters = { status: 'Confirmed' }
+    ↓
+Component re-renders with filtered appointments
+    ↓
+Each appointment's status is colored via: getStatusBadgeColor()
+    ↓
+User sees "Confirmed" appointments highlighted in green
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                        COMPONENT COMMUNICATION
+═══════════════════════════════════════════════════════════════════════════════
+
+                    DashboardLayout
+                          │
+                ┌─────────┴──────────┐
+                ▼                    ▼
+            Sidebar              Main Content
+                              (Page component)
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+            StatsGrid         DataTable        AlertBanner
+                    │               │               │
+                    ├─ StatCard    ├─ FilterBar   └─ Alerts[]
+                    │          │   ├─ Pagination
+                    │               ├─ ConfirmDialog
+                    │               └─ Helper Functions
+                    │
+            Charts
+            ├─ RevenueChart
+            └─ AppointmentsChart
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                          API INTEGRATION POINTS
+═══════════════════════════════════════════════════════════════════════════════
+
+Current: Mock Data (in dashboardApi.js)
+                    ↓
+Future: Real Backend API
+
+Replace these functions:
+├─ getAllAppointments()    → GET /api/appointments
+├─ getAllCustomers()       → GET /api/customers
+├─ getAllStaff()           → GET /api/staff
+├─ getAllServices()        → GET /api/services
+├─ createBooking()         → POST /api/bookings
+├─ updateBookingStatus()   → PATCH /api/bookings/:id/status
+├─ cancelAppointment()     → DELETE /api/appointments/:id
+└─ getDashboardMetrics()   → GET /api/metrics
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                             RESPONSIVE DESIGN
+═══════════════════════════════════════════════════════════════════════════════
+
+MOBILE (<640px)
+┌─────────────┐
+│   Topbar    │
+└─────────────┘
+│   Content   │
+├─────────────┤
+│  Single Col │
+│   Layout    │
+└─────────────┘
+
+
+TABLET (640px - 1024px)
+┌──────────────────────┐
+│      Topbar          │
+└──────────────────────┘
+│  Two Column Layout   │
+├──────────────────────┤
+│  Col1  │  Col2      │
+└──────────────────────┘
+
+
+DESKTOP (>1024px)
+┌──────────────────────────────┐
+│         Topbar               │
+└──────────────────────────────┘
+│ Side │  Four Column          │
+│ bar  │  Layout               │
+│      ├──────────────────────┤
+│      │ Card│Card│Card│Card  │
+│      ├──────────────────────┤
+│      │  Full Width Table    │
+└──────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+                         COMPLETE & READY TO USE! ✓
+═══════════════════════════════════════════════════════════════════════════════
