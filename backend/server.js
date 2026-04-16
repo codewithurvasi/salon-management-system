@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
+import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 
 dotenv.config();
 
@@ -15,8 +17,14 @@ app.get("/", (req, res) => {
   res.json({ message: "✅ API Running on port 5000" });
 });
 
+// Auth Routes
+app.use("/api/auth", authRoutes);
+
 // Dashboard Routes
 app.use("/api/dashboard", dashboardRoutes);
+
+app.use(notFound);
+app.use(errorHandler);
 
 // MongoDB connect
 mongoose.connect(process.env.MONGO_URI)

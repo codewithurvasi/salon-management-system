@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Phone,
   Mail,
@@ -330,13 +331,12 @@ export default function Contact() {
             </div>
 
             <div className="flex flex-col gap-4 sm:flex-row">
-              <button className="inline-flex h-14 items-center justify-center rounded-2xl bg-[#e58b00] px-8 text-base font-semibold text-white shadow-[0_12px_30px_rgba(229,139,0,0.25)] transition hover:bg-[#cf7d00]">
-                Book Now
-              </button>
-              <button className="inline-flex h-14 items-center justify-center rounded-2xl border border-[#e3d7cc] bg-white px-8 text-base font-semibold text-slate-800 transition hover:bg-[#f8f1ea]">
-                Call Us
-              </button>
-            </div>
+  <Link to="/booking">
+    <button className="inline-flex h-14 items-center justify-center rounded-2xl bg-[#e58b00] px-8 text-base font-semibold text-white shadow-[0_12px_30px_rgba(229,139,0,0.25)] transition hover:bg-[#cf7d00]">
+      Book Now
+    </button>
+  </Link>
+</div>
           </div>
         </div>
       </div>

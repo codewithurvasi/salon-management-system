@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { createCustomer } from "../../../api/dashboardApi";
+import { updateCustomer } from "../../../api/dashboardApi";
 
 const initialFormData = {
   name: "",
@@ -16,22 +16,44 @@ const initialFormData = {
   notes: "",
 };
 
-export default function AddCustomerModal({ isOpen, onClose, onSuccess }) {
+export default function EditCustomerModal({
+  isOpen,
+  onClose,
+  customer,
+  onSuccess,
+}) {
   const [formData, setFormData] = useState(initialFormData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (isOpen && customer) {
+      setFormData({
+        name: customer.name || "",
+        email: customer.email || "",
+        phone: customer.phone || "",
+        gender: customer.gender || "",
+        dob: customer.dob ? String(customer.dob).split("T")[0] : "",
+        address: customer.address || "",
+        city: customer.city || "",
+        preferredService: customer.preferredService || "",
+        preferredStylist: customer.preferredStylist || "",
+        status: customer.status || "Active",
+        notes: customer.notes || "",
+      });
+      setError("");
+      setLoading(false);
+    }
+
     if (!isOpen) {
       setFormData(initialFormData);
       setError("");
       setLoading(false);
     }
-  }, [isOpen]);
+  }, [isOpen, customer]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -61,16 +83,21 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!customer?._id && !customer?.id) {
+      setError("Customer ID is missing");
+      return;
+    }
+
     const validationError = validateForm();
     if (validationError) {
       setError(validationError);
       return;
     }
 
-    setLoading(true);
-    setError("");
-
     try {
+      setLoading(true);
+      setError("");
+
       const payload = {
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
@@ -85,9 +112,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }) {
         notes: formData.notes.trim(),
       };
 
-      await createCustomer(payload);
-
-      setFormData(initialFormData);
+      await updateCustomer(customer._id || customer.id, payload);
 
       if (onSuccess) onSuccess();
       if (onClose) onClose();
@@ -95,7 +120,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }) {
       setError(
         err?.response?.data?.message ||
           err?.message ||
-          "Failed to create customer"
+          "Failed to update customer"
       );
     } finally {
       setLoading(false);
@@ -116,9 +141,9 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }) {
       <div className="max-h-[95vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-slate-900">Add New Customer</h2>
+            <h2 className="text-3xl font-bold text-slate-900">Edit Customer</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Add customer details for salon records and future bookings
+              Update customer details and salon records
             </p>
           </div>
 
@@ -312,7 +337,7 @@ export default function AddCustomerModal({ isOpen, onClose, onSuccess }) {
               disabled={loading}
               className="rounded-xl bg-pink-600 px-6 py-3 font-medium text-white transition hover:bg-pink-700 disabled:opacity-50"
             >
-              {loading ? "Creating..." : "Add Customer"}
+              {loading ? "Updating..." : "Update Customer"}
             </button>
           </div>
         </form>

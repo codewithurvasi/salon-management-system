@@ -13,8 +13,9 @@ export default function ManageServices() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
   const { filters, updateFilter } = useFilters({ category: "" });
-  const { sortKey, sortOrder, sortedItems, toggleSort } = useSorting(services, "name", "asc");
+  const { sortedItems } = useSorting(services, "name", "asc");
 
   useEffect(() => {
     fetchServices();
@@ -25,18 +26,31 @@ export default function ManageServices() {
       setLoading(true);
       const category = filters.category || "";
       const response = await getAllServices(category, page, 10);
-      setServices(response.data || []);
-      setTotalPages(response.totalPages || 1);
+
+      console.log("Services API response:", response);
+
+      const serviceList =
+        response?.services ||
+        response?.data?.services ||
+        response?.data ||
+        [];
+
+      setServices(Array.isArray(serviceList) ? serviceList : []);
+      setTotalPages(
+        response?.totalPages ||
+          response?.pagination?.totalPages ||
+          response?.data?.pagination?.totalPages ||
+          1
+      );
       setError("");
     } catch (err) {
       setError("Failed to load services");
-      console.error(err);
+      console.error("Fetch services error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Filter services based on category
   const filteredServices = sortedItems.filter((service) => {
     if (filters.category && service.category !== filters.category) return false;
     return true;
@@ -46,35 +60,36 @@ export default function ManageServices() {
     {
       key: "name",
       label: "Service Name",
-      sortable: true,
+      render: (value) => (
+        <span className="font-medium text-slate-900">{value || "N/A"}</span>
+      ),
     },
     {
       key: "category",
       label: "Category",
-      sortable: true,
+      render: (value) => value || "N/A",
     },
     {
       key: "price",
       label: "Price",
-      render: (value) => formatCurrency(value),
-      sortable: true,
+      render: (value) => formatCurrency(value || 0),
     },
     {
       key: "duration",
       label: "Duration",
-      render: (value) => `${value} mins`,
-      sortable: true,
+      render: (value) => `${value || 0} mins`,
     },
     {
-      key: "totalBookings",
-      label: "Bookings",
-      sortable: true,
-    },
-    {
-      key: "rating",
-      label: "Rating",
-      render: (value) => value ? `${value} ⭐` : "N/A",
-      sortable: true,
+      key: "description",
+      label: "Description",
+      render: (value) =>
+        value ? (
+          <span className="block max-w-[260px] truncate text-slate-700">
+            {value}
+          </span>
+        ) : (
+          "N/A"
+        ),
     },
     {
       key: "isActive",
@@ -100,6 +115,7 @@ export default function ManageServices() {
       type: "select",
       value: filters.category,
       options: [
+        { value: "", label: "All Category" },
         { value: "Hair", label: "Hair" },
         { value: "Makeup", label: "Makeup" },
         { value: "Facial", label: "Facial" },
@@ -112,17 +128,31 @@ export default function ManageServices() {
   ];
 
   const handleAddServiceSuccess = () => {
-    fetchServices(); // Refresh the list
+    setShowAddModal(false);
+    fetchServices();
   };
+
+  const totalServices = services.length;
+  const activeServices = services.filter((s) => s.isActive).length;
+  const totalRevenue = services.reduce((sum, s) => sum + (Number(s.revenue) || 0), 0);
+  const avgRating =
+    services.length > 0
+      ? (
+          services.reduce((sum, s) => sum + (Number(s.rating) || 0), 0) /
+          services.length
+        ).toFixed(1)
+      : "0.0";
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Service Management</h1>
-          <p className="mt-1 text-slate-600">Manage your salon services and pricing</p>
+          <p className="mt-1 text-slate-600">
+            Manage your salon services and pricing
+          </p>
         </div>
+
         <button
           onClick={() => setShowAddModal(true)}
           className="rounded-lg bg-pink-600 px-6 py-3 font-medium text-white hover:bg-pink-700"
@@ -131,41 +161,42 @@ export default function ManageServices() {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-4">
         <div className="rounded-2xl bg-blue-50 p-4">
           <p className="text-sm text-slate-600">Total Services</p>
-          <h3 className="mt-2 text-2xl font-bold text-blue-600">{services.length}</h3>
+          <h3 className="mt-2 text-2xl font-bold text-blue-600">{totalServices}</h3>
         </div>
+
         <div className="rounded-2xl bg-green-50 p-4">
           <p className="text-sm text-slate-600">Active Services</p>
           <h3 className="mt-2 text-2xl font-bold text-green-600">
-            {services.filter((s) => s.isActive).length}
+            {activeServices}
           </h3>
         </div>
+
         <div className="rounded-2xl bg-orange-50 p-4">
           <p className="text-sm text-slate-600">Total Revenue</p>
           <h3 className="mt-2 text-2xl font-bold text-orange-600">
-            ₹{services.reduce((sum, s) => sum + (s.revenue || 0), 0).toLocaleString()}
+            ₹{totalRevenue.toLocaleString()}
           </h3>
         </div>
+
         <div className="rounded-2xl bg-purple-50 p-4">
           <p className="text-sm text-slate-600">Avg Rating</p>
           <h3 className="mt-2 text-2xl font-bold text-purple-600">
-            {services.length > 0
-              ? (services.reduce((sum, s) => sum + (s.rating || 0), 0) / services.length).toFixed(1)
-              : 0} ⭐
+            {avgRating} ⭐
           </h3>
         </div>
       </div>
 
-      {/* Filter */}
       <FilterBar
         filters={filterOptions}
-        onFilterChange={(id, value) => updateFilter(id, value)}
+        onFilterChange={(id, value) => {
+          setPage(1);
+          updateFilter(id, value);
+        }}
       />
 
-      {/* Data Table */}
       <DataTable
         columns={columns}
         data={filteredServices}
@@ -175,6 +206,37 @@ export default function ManageServices() {
         onEdit={(service) => console.log("Edit:", service)}
         onDelete={(service) => console.log("Delete:", service)}
       />
+
+      {!loading && !error && services.length > 0 && (
+        <div className="mt-6 flex items-center justify-between">
+          <div className="text-sm text-slate-600">
+            Showing {(page - 1) * 10 + 1} to{" "}
+            {Math.min(page * 10, services.length)} of {services.length} services
+          </div>
+
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Previous
+            </button>
+
+            <span className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">
+              Page {page} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       <AddServiceModal
         isOpen={showAddModal}

@@ -1,6 +1,4 @@
-import { useState } from "react";
-import { X } from "lucide-react";
-import { createStaff } from "../../../api/dashboardApi";
+import { useEffect, useState } from "react";
 
 const initialForm = {
   name: "",
@@ -13,12 +11,33 @@ const initialForm = {
   status: "Active",
 };
 
-export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
+export default function EditStaffModal({
+  isOpen,
+  onClose,
+  staff,
+  onSave,
+}) {
   const [formData, setFormData] = useState(initialForm);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const handleInputChange = (e) => {
+  useEffect(() => {
+    if (staff) {
+      setFormData({
+        name: staff.name || "",
+        email: staff.email || "",
+        phone: staff.phone || "",
+        specialization: staff.specialization || "",
+        experience: staff.experience || "",
+        joinDate: staff.joinDate ? String(staff.joinDate).slice(0, 10) : "",
+        biography: staff.biography || "",
+        status: staff.status || "Active",
+      });
+    } else {
+      setFormData(initialForm);
+    }
+  }, [staff, isOpen]);
+
+  const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -29,26 +48,36 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
   const handleClose = () => {
     if (loading) return;
     setFormData(initialForm);
-    setError("");
     onClose();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
+
+    if (!formData.name.trim()) {
+      alert("Name is required");
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      alert("Email is required");
+      return;
+    }
+
+    if (!formData.phone.trim()) {
+      alert("Phone is required");
+      return;
+    }
+
+    if (!formData.specialization.trim()) {
+      alert("Specialization is required");
+      return;
+    }
 
     try {
-      const requiredFields = ["name", "email", "phone", "specialization"];
-      const missingFields = requiredFields.filter(
-        (field) => !formData[field]?.toString().trim()
-      );
+      setLoading(true);
 
-      if (missingFields.length > 0) {
-        throw new Error(`Please fill in: ${missingFields.join(", ")}`);
-      }
-
-      await createStaff({
+      await onSave({
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
@@ -60,10 +89,8 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
       });
 
       setFormData(initialForm);
-      onSuccess();
-      onClose();
-    } catch (err) {
-      setError(err?.response?.data?.message || err.message || "Failed to create staff member");
+    } catch (error) {
+      console.error("Edit staff save error:", error);
     } finally {
       setLoading(false);
     }
@@ -72,24 +99,22 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-6">
       <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Add New Staff Member</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Edit Staff Member</h2>
+            <p className="mt-1 text-sm text-slate-500">Update staff details</p>
+          </div>
+
           <button
-            onClick={handleClose}
-            className="rounded-lg p-2 transition hover:bg-slate-100"
             type="button"
+            onClick={handleClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
           >
-            <X className="h-5 w-5" />
+            ×
           </button>
         </div>
-
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            {error}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
           <div>
@@ -97,13 +122,12 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
               Full Name *
             </label>
             <input
-              type="text"
               name="name"
               value={formData.name}
-              onChange={handleInputChange}
+              onChange={handleChange}
+              type="text"
+              placeholder="Enter full name"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
-              placeholder="Enter staff name"
-              required
             />
           </div>
 
@@ -112,13 +136,12 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
               Email *
             </label>
             <input
-              type="email"
               name="email"
               value={formData.email}
-              onChange={handleInputChange}
+              onChange={handleChange}
+              type="email"
+              placeholder="Enter email"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
-              placeholder="staff@example.com"
-              required
             />
           </div>
 
@@ -127,13 +150,12 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
               Phone *
             </label>
             <input
-              type="tel"
               name="phone"
               value={formData.phone}
-              onChange={handleInputChange}
+              onChange={handleChange}
+              type="text"
+              placeholder="Enter phone number"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
-              placeholder="+91 9876543210"
-              required
             />
           </div>
 
@@ -144,9 +166,8 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
             <select
               name="specialization"
               value={formData.specialization}
-              onChange={handleInputChange}
+              onChange={handleChange}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
-              required
             >
               <option value="">Select specialization</option>
               <option value="Hair Stylist">Hair Stylist</option>
@@ -163,12 +184,12 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
               Experience
             </label>
             <input
-              type="number"
               name="experience"
               value={formData.experience}
-              onChange={handleInputChange}
+              onChange={handleChange}
+              type="number"
+              placeholder="Enter years of experience"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
-              placeholder="e.g. 3"
             />
           </div>
 
@@ -177,10 +198,10 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
               Join Date
             </label>
             <input
-              type="date"
               name="joinDate"
               value={formData.joinDate}
-              onChange={handleInputChange}
+              onChange={handleChange}
+              type="date"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
             />
           </div>
@@ -192,7 +213,7 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
             <select
               name="status"
               value={formData.status}
-              onChange={handleInputChange}
+              onChange={handleChange}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
             >
               <option value="Active">Active</option>
@@ -208,27 +229,29 @@ export default function AddStaffModal({ isOpen, onClose, onSuccess }) {
             <textarea
               name="biography"
               value={formData.biography}
-              onChange={handleInputChange}
-              rows={4}
+              onChange={handleChange}
+              rows="4"
+              placeholder="Write short biography"
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-pink-500 focus:ring-2 focus:ring-pink-100"
-              placeholder="Brief biography and skills..."
-            />
+            ></textarea>
           </div>
 
           <div className="md:col-span-2 flex justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-xl border border-slate-300 px-6 py-3 font-medium text-slate-700 hover:bg-slate-50"
+              disabled={loading}
+              className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               Cancel
             </button>
+
             <button
               type="submit"
               disabled={loading}
-              className="rounded-xl bg-pink-600 px-6 py-3 font-medium text-white hover:bg-pink-700 disabled:opacity-50"
+              className="rounded-xl bg-pink-600 px-5 py-3 font-medium text-white transition hover:bg-pink-700 disabled:opacity-60"
             >
-              {loading ? "Creating..." : "Add Staff Member"}
+              {loading ? "Updating..." : "Update Staff"}
             </button>
           </div>
         </form>

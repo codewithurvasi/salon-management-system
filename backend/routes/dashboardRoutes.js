@@ -3,7 +3,11 @@ import {
   getDashboardOverview,
   getAllAppointments,
   getAllCustomers,
+  updateCustomer,
+  deleteCustomer,
   getAllStaff,
+  updateStaff,
+  deleteStaff,
   getAllServices,
   getTopServices,
   getTopStaff,
@@ -15,6 +19,7 @@ import {
   createCustomer,
   createStaff,
   createService,
+  
 } from "../controllers/dashboardController.js";
 
 const router = express.Router();
@@ -31,10 +36,14 @@ router.delete("/appointments/:id", cancelAppointment);
 // Customers
 router.get("/customers", getAllCustomers);
 router.post("/customers", createCustomer);
-
+router.put("/customers/:id", updateCustomer);
+router.delete("/customers/:id", deleteCustomer);
+// Staff
 // Staff
 router.get("/staff", getAllStaff);
 router.post("/staff", createStaff);
+router.patch("/staff/:id", updateStaff);
+router.delete("/staff/:id", deleteStaff);
 router.get("/staff/top", getTopStaff);
 
 // Services

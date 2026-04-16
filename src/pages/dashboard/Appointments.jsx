@@ -91,23 +91,19 @@ const fetchAppointments = async () => {
     }
   };
 
-  const handleStatusChange = async (aptId, newStatus) => {
-    try {
-      await updateAppointmentStatus(aptId, newStatus);
-
-      setAppointments((prev) =>
-        prev.map((apt) =>
-          apt._id === aptId || apt.id === aptId
-            ? { ...apt, status: newStatus }
-            : apt
-        )
-      );
-    } catch (err) {
-      setError("Failed to update appointment status");
-      console.error("Status update error:", err);
-    }
-  };
-
+const handleStatusChange = async (aptId, newStatus) => {
+  try {
+    setError("");
+    const response = await updateAppointmentStatus(aptId, newStatus);
+    console.log("Appointment status updated:", response);
+    await fetchAppointments();
+  } catch (err) {
+    setError(
+      err?.response?.data?.message || "Failed to update appointment status"
+    );
+    console.error("Status update error:", err);
+  }
+};
   const handleDeleteAppointment = async (aptId) => {
     try {
       await cancelAppointment(aptId);

@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import DashboardLayout from "../layouts/DashboardLayout";
+import ProtectedRoute from "../components/common/ProtectedRoute";
 
 import Home from "../pages/website/Home";
 import About from "../pages/website/About";
@@ -12,6 +13,8 @@ import Offers from "../pages/website/Offers";
 import Booking from "../pages/website/Booking";
 import Contact from "../pages/website/Contact";
 import Faq from "../pages/website/Faq";
+import Login from "../pages/website/Login";
+import Signup from "../pages/website/Signup";
 // import ScrollToTop from "../components/common/ScrollToTop";
 
 import DashboardHome from "../pages/dashboard/DashboardHome";
@@ -23,6 +26,7 @@ import Revenue from "../pages/dashboard/Revenue";
 import Inventory from "../pages/dashboard/Inventory";
 import Reviews from "../pages/dashboard/Reviews";
 import Settings from "../pages/dashboard/Settings";
+import AdminLogin from "../pages/dashboard/AdminLogin";
 
 export default function AppRoutes() {
   return (
@@ -40,9 +44,17 @@ export default function AppRoutes() {
         <Route path="booking" element={<Booking />} />
         <Route path="contact" element={<Contact />} />
         <Route path="faq" element={<Faq />} />
+        <Route path="login" element={<Login />} />
+        <Route path="signup" element={<Signup />} />
       </Route>
 
-      <Route path="/dashboard" element={<DashboardLayout />}>
+      <Route path="/admin-login" element={<AdminLogin />} />
+
+      <Route path="/dashboard" element={
+        <ProtectedRoute adminOnly={true}>
+          <DashboardLayout />
+        </ProtectedRoute>
+      }>
         <Route index element={<DashboardHome />} />
         <Route path="appointments" element={<Appointments />} />
         <Route path="customers" element={<Customers />} />

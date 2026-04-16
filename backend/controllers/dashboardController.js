@@ -4,23 +4,147 @@ import Service from "../models/Service.js";
 import StaffMember from "../models/StaffMember.js";
 import DashboardMetric from "../models/DashboardMetric.js";
 
+// Helper: safely parse date
+const parseAppointmentDate = (dateValue) => {
+  if (!dateValue) return null;
+  const parsed = new Date(dateValue);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+// Helper: get normalized email
+const normalizeEmail = (email) => {
+  if (!email || typeof email !== "string") return "";
+  return email.trim().toLowerCase();
+};
+
+// Helper: get normalized phone
+const normalizePhone = (phone) => {
+  if (!phone || typeof phone !== "string") return "";
+  return phone.trim();
+};
+
+// Helper: find customer from appointment
+const findCustomerFromAppointment = async (appointment) => {
+  const email = normalizeEmail(appointment?.email);
+  const phone = normalizePhone(appointment?.phone);
+
+  if (!email && !phone) return null;
+
+  const orQuery = [];
+  if (email) orQuery.push({ email });
+  if (phone) orQuery.push({ phone });
+
+  if (!orQuery.length) return null;
+
+  return Customer.findOne({ $or: orQuery });
+};
+
+// Helper: create or update customer when appointment becomes confirmed/completed
+const applyAppointmentToCustomer = async (appointment) => {
+  if (!appointment) return null;
+
+  const email = normalizeEmail(appointment.email);
+  const phone = normalizePhone(appointment.phone);
+  const appointmentDate = parseAppointmentDate(appointment.date) || new Date();
+  const appointmentPrice = Number(appointment.price) || 0;
+
+  if (!email && !phone) return null;
+
+  let customer = await findCustomerFromAppointment(appointment);
+
+  if (!customer) {
+    customer = new Customer({
+      name: appointment.customerName || "Unknown Customer",
+      email: email || "",
+      phone: phone || "",
+      address: appointment.address || "",
+      city: appointment.city || "",
+      notes: appointment.notes || "",
+      preferredService: appointment.service || "",
+      preferredStylist: appointment.stylist || "",
+      status: "Active",
+      totalSpent: appointmentPrice,
+      totalBookings: 1,
+      bookings: 1,
+      lastVisit: appointmentDate,
+      history: [
+        {
+          appointmentId: appointment._id,
+          service: appointment.service || "",
+          stylist: appointment.stylist || "",
+          date: appointmentDate,
+          time: appointment.time || "",
+          amount: appointmentPrice,
+          status: appointment.status || "Confirmed",
+        },
+      ],
+    });
+
+    await customer.save();
+    return customer;
+  }
+
+  // Prevent duplicate increment for same appointment
+  const alreadyExistsInHistory = Array.isArray(customer.history)
+    ? customer.history.some(
+        (item) =>
+          String(item?.appointmentId || "") === String(appointment._id || "")
+      )
+    : false;
+
+  customer.name = appointment.customerName || customer.name;
+  if (email) customer.email = email;
+  if (phone) customer.phone = phone;
+  customer.address = appointment.address || customer.address || "";
+  customer.city = appointment.city || customer.city || "";
+  customer.notes = appointment.notes || customer.notes || "";
+  customer.preferredService = appointment.service || customer.preferredService || "";
+  customer.preferredStylist = appointment.stylist || customer.preferredStylist || "";
+  customer.status = "Active";
+  customer.lastVisit = appointmentDate;
+
+  if (!alreadyExistsInHistory) {
+    customer.totalBookings = (Number(customer.totalBookings) || 0) + 1;
+    customer.bookings = (Number(customer.bookings) || 0) + 1;
+    customer.totalSpent = (Number(customer.totalSpent) || 0) + appointmentPrice;
+
+    if (!Array.isArray(customer.history)) {
+      customer.history = [];
+    }
+
+    customer.history.push({
+      appointmentId: appointment._id,
+      service: appointment.service || "",
+      stylist: appointment.stylist || "",
+      date: appointmentDate,
+      time: appointment.time || "",
+      amount: appointmentPrice,
+      status: appointment.status || "Confirmed",
+    });
+  }
+
+  await customer.save();
+  return customer;
+};
+
 // Get Dashboard Overview
 export const getDashboardOverview = async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Get metrics
     const totalBookings = await Appointment.countDocuments();
+
     const todayAppointments = await Appointment.countDocuments({
-      date: { $gte: today, $lt: tomorrow },
+      createdAt: { $gte: today, $lt: tomorrow },
     });
+
     const activeCustomers = await Customer.countDocuments({ status: "Active" });
     const totalStaff = await StaffMember.countDocuments({ status: "Active" });
 
-    // Get revenue (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -31,27 +155,38 @@ export const getDashboardOverview = async (req, res) => {
           status: { $in: ["Completed", "Confirmed"] },
         },
       },
-      { $group: { _id: null, total: { $sum: "$price" } } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$price" },
+        },
+      },
     ]);
 
     const revenue = monthlyRevenue[0]?.total || 0;
 
-    // Get pending appointments
     const pendingAppointments = await Appointment.countDocuments({
       status: "Pending",
     });
 
-    // Get completion rate
     const completedBookings = await Appointment.countDocuments({
       status: "Completed",
     });
-    const completionRate =
-      totalBookings > 0 ? ((completedBookings / totalBookings) * 100).toFixed(1) : 0;
 
-    // Get average rating
+    const completionRate =
+      totalBookings > 0
+        ? ((completedBookings / totalBookings) * 100).toFixed(1)
+        : 0;
+
     const staffRatings = await StaffMember.aggregate([
-      { $group: { _id: null, avgRating: { $avg: "$rating" } } },
+      {
+        $group: {
+          _id: null,
+          avgRating: { $avg: "$rating" },
+        },
+      },
     ]);
+
     const averageRating = staffRatings[0]?.avgRating || 0;
 
     res.json({
@@ -64,11 +199,14 @@ export const getDashboardOverview = async (req, res) => {
         pendingAppointments,
         totalStaff,
         completionRate,
-        averageRating: averageRating.toFixed(1),
+        averageRating: Number(averageRating).toFixed(1),
       },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
@@ -77,26 +215,28 @@ export const getAllAppointments = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
 
-    console.log("Appointments API hit");
-    console.log("Query params:", req.query);
-
     const query = {};
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
 
-    console.log("Mongo query:", query);
+    const numericPage = Number(page) || 1;
+    const numericLimit = Number(limit) || 10;
+    const skip = (numericPage - 1) * numericLimit;
 
-    const appointments = await Appointment.find(query);
-    console.log("Appointments found:", appointments);
+    const [appointments, total] = await Promise.all([
+      Appointment.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(numericLimit),
+      Appointment.countDocuments(query),
+    ]);
 
     res.status(200).json({
       status: "success",
       data: appointments,
       pagination: {
-        currentPage: Number(page),
-        totalPages: 1,
-        total: appointments.length,
+        currentPage: numericPage,
+        totalPages: Math.ceil(total / numericLimit) || 1,
+        total,
       },
     });
   } catch (error) {
@@ -114,10 +254,13 @@ export const getAllCustomers = async (req, res) => {
     const { status, page = 1, limit = 10 } = req.query;
     const query = status ? { status } : {};
 
+    const numericPage = Number(page) || 1;
+    const numericLimit = Number(limit) || 10;
+
     const customers = await Customer.find(query)
-      .sort({ lastVisit: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .sort({ lastVisit: -1, createdAt: -1 })
+      .limit(numericLimit)
+      .skip((numericPage - 1) * numericLimit);
 
     const total = await Customer.countDocuments(query);
 
@@ -125,13 +268,16 @@ export const getAllCustomers = async (req, res) => {
       status: "success",
       data: customers,
       pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / limit),
+        currentPage: numericPage,
+        totalPages: Math.ceil(total / numericLimit) || 1,
         total,
       },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
@@ -141,10 +287,13 @@ export const getAllStaff = async (req, res) => {
     const { status, page = 1, limit = 10 } = req.query;
     const query = status ? { status } : {};
 
+    const numericPage = Number(page) || 1;
+    const numericLimit = Number(limit) || 10;
+
     const staff = await StaffMember.find(query)
       .sort({ rating: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(numericLimit)
+      .skip((numericPage - 1) * numericLimit);
 
     const total = await StaffMember.countDocuments(query);
 
@@ -152,13 +301,16 @@ export const getAllStaff = async (req, res) => {
       status: "success",
       data: staff,
       pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / limit),
+        currentPage: numericPage,
+        totalPages: Math.ceil(total / numericLimit) || 1,
         total,
       },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
@@ -168,10 +320,13 @@ export const getAllServices = async (req, res) => {
     const { category, page = 1, limit = 10 } = req.query;
     const query = category ? { category } : { isActive: true };
 
+    const numericPage = Number(page) || 1;
+    const numericLimit = Number(limit) || 10;
+
     const services = await Service.find(query)
       .sort({ totalBookings: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(numericLimit)
+      .skip((numericPage - 1) * numericLimit);
 
     const total = await Service.countDocuments(query);
 
@@ -179,20 +334,23 @@ export const getAllServices = async (req, res) => {
       status: "success",
       data: services,
       pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / limit),
+        currentPage: numericPage,
+        totalPages: Math.ceil(total / numericLimit) || 1,
         total,
       },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
 // Get Top Services
 export const getTopServices = async (req, res) => {
   try {
-    const limit = req.query.limit || 4;
+    const limit = Number(req.query.limit) || 4;
 
     const topServices = await Service.find({ isActive: true })
       .sort({ totalBookings: -1 })
@@ -203,14 +361,17 @@ export const getTopServices = async (req, res) => {
       data: topServices,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
 // Get Top Staff
 export const getTopStaff = async (req, res) => {
   try {
-    const limit = req.query.limit || 4;
+    const limit = Number(req.query.limit) || 4;
 
     const topStaff = await StaffMember.find({ status: "Active" })
       .sort({ rating: -1, totalBookings: -1 })
@@ -221,7 +382,10 @@ export const getTopStaff = async (req, res) => {
       data: topStaff,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
@@ -234,8 +398,9 @@ export const getRevenueAnalytics = async (req, res) => {
     for (let i = months - 1; i >= 0; i--) {
       const date = new Date();
       date.setMonth(date.getMonth() - i);
+
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
 
       const revenue = await Appointment.aggregate([
         {
@@ -244,10 +409,16 @@ export const getRevenueAnalytics = async (req, res) => {
             status: { $in: ["Completed", "Confirmed"] },
           },
         },
-        { $group: { _id: null, total: { $sum: "$price" } } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$price" },
+          },
+        },
       ]);
 
       const monthName = monthStart.toLocaleString("default", { month: "short" });
+
       data.push({
         month: monthName,
         revenue: revenue[0]?.total || 0,
@@ -259,7 +430,10 @@ export const getRevenueAnalytics = async (req, res) => {
       data,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
@@ -272,23 +446,27 @@ export const getAppointmentsTrend = async (req, res) => {
     for (let i = months - 1; i >= 0; i--) {
       const date = new Date();
       date.setMonth(date.getMonth() - i);
+
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
 
       const completed = await Appointment.countDocuments({
         createdAt: { $gte: monthStart, $lte: monthEnd },
         status: "Completed",
       });
+
       const pending = await Appointment.countDocuments({
         createdAt: { $gte: monthStart, $lte: monthEnd },
         status: "Pending",
       });
+
       const cancelled = await Appointment.countDocuments({
         createdAt: { $gte: monthStart, $lte: monthEnd },
         status: "Cancelled",
       });
 
       const monthName = monthStart.toLocaleString("default", { month: "short" });
+
       data.push({
         month: monthName,
         completed,
@@ -302,21 +480,61 @@ export const getAppointmentsTrend = async (req, res) => {
       data,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
 // Create Appointment
 export const createAppointment = async (req, res) => {
   try {
-    const appointment = new Appointment(req.body);
+    const {
+      customerName,
+      email,
+      phone,
+      service,
+      stylist,
+      date,
+      time,
+      duration,
+      price,
+      notes,
+      status,
+      address,
+      city,
+    } = req.body;
+
+    if (!customerName || !email || !phone || !service || !date || !time) {
+      return res.status(400).json({
+        status: "error",
+        message: "Please provide all required appointment fields",
+      });
+    }
+
+    const appointment = new Appointment({
+      customerName,
+      email: normalizeEmail(email),
+      phone: normalizePhone(phone),
+      service,
+      stylist: stylist || "",
+      date,
+      time,
+      duration: Number(duration) || 60,
+      price: Number(price) || 0,
+      notes: notes || "",
+      address: address || "",
+      city: city || "",
+      status: status || "Pending",
+    });
+
     await appointment.save();
 
-    // Update customer booking count
-    await Customer.findOneAndUpdate(
-      { email: req.body.email },
-      { $inc: { totalBookings: 1 } }
-    );
+    // Agar direct confirmed/completed create ho rahi ho
+    if (appointment.status === "Confirmed" || appointment.status === "Completed") {
+      await applyAppointmentToCustomer(appointment);
+    }
 
     res.status(201).json({
       status: "success",
@@ -324,7 +542,11 @@ export const createAppointment = async (req, res) => {
       data: appointment,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    console.error("Create appointment error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message || "Failed to create appointment",
+    });
   }
 };
 
@@ -334,73 +556,136 @@ export const updateAppointmentStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const appointment = await Appointment.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true }
-    );
+    console.log("Update appointment status request:", { id, status });
 
-    if (!appointment) {
-      return res.status(404).json({ status: "error", message: "Appointment not found" });
+    if (!status) {
+      return res.status(400).json({
+        status: "error",
+        message: "Status is required",
+      });
     }
 
-    res.json({
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        status: "error",
+        message: "Appointment not found",
+      });
+    }
+
+    const previousStatus = appointment.status;
+    appointment.status = status;
+    await appointment.save();
+
+    // Customer me add/update only when changing into Confirmed or Completed
+    if (
+      (status === "Confirmed" || status === "Completed") &&
+      previousStatus !== "Confirmed" &&
+      previousStatus !== "Completed"
+    ) {
+      await applyAppointmentToCustomer(appointment);
+    }
+
+    res.status(200).json({
       status: "success",
-      message: "Appointment updated",
+      message: "Appointment updated successfully",
       data: appointment,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    console.error("Update appointment status error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message || "Failed to update appointment status",
+    });
   }
 };
 
-// Cancel Appointment
+// Delete Appointment
 export const cancelAppointment = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const appointment = await Appointment.findByIdAndUpdate(
-      id,
-      { status: "Cancelled" },
-      { new: true }
-    );
+    const deletedAppointment = await Appointment.findByIdAndDelete(id);
 
-    if (!appointment) {
-      return res.status(404).json({ status: "error", message: "Appointment not found" });
+    if (!deletedAppointment) {
+      return res.status(404).json({
+        status: "error",
+        message: "Appointment not found",
+      });
     }
 
     res.json({
       status: "success",
-      message: "Appointment cancelled",
-      data: appointment,
+      message: "Appointment deleted successfully",
+      data: deletedAppointment,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    console.error("Delete appointment error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
 // Create Customer
 export const createCustomer = async (req, res) => {
   try {
-    const { name, email, phone, address, city, notes } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      gender,
+      dob,
+      address,
+      city,
+      preferredService,
+      preferredStylist,
+      status,
+      notes,
+    } = req.body;
 
-    // Check if customer with this email already exists
-    const existingCustomer = await Customer.findOne({ email });
-    if (existingCustomer) {
+    if (!name || !phone) {
       return res.status(400).json({
         status: "error",
-        message: "Customer with this email already exists"
+        message: "Name and phone are required",
       });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
+
+    const duplicateQuery = [];
+    if (normalizedEmail) duplicateQuery.push({ email: normalizedEmail });
+    if (normalizedPhone) duplicateQuery.push({ phone: normalizedPhone });
+
+    if (duplicateQuery.length) {
+      const existingCustomer = await Customer.findOne({ $or: duplicateQuery });
+      if (existingCustomer) {
+        return res.status(400).json({
+          status: "error",
+          message: "Customer with this email or phone already exists",
+        });
+      }
     }
 
     const customer = new Customer({
       name,
-      email,
-      phone,
-      address,
-      city,
-      notes,
-      status: "Active"
+      email: normalizedEmail || "",
+      phone: normalizedPhone,
+      gender: gender || "",
+      dob: dob || null,
+      address: address || "",
+      city: city || "",
+      preferredService: preferredService || "",
+      preferredStylist: preferredStylist || "",
+      notes: notes || "",
+      status: status || "Active",
+      totalSpent: 0,
+      totalBookings: 0,
+      bookings: 0,
+      lastVisit: null,
     });
 
     await customer.save();
@@ -411,7 +696,114 @@ export const createCustomer = async (req, res) => {
       data: customer,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Update Customer
+export const updateCustomer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      email,
+      phone,
+      gender,
+      dob,
+      address,
+      city,
+      preferredService,
+      preferredStylist,
+      notes,
+      status,
+    } = req.body;
+
+    const customer = await Customer.findById(id);
+
+    if (!customer) {
+      return res.status(404).json({
+        status: "error",
+        message: "Customer not found",
+      });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
+
+    const duplicateQuery = [];
+    if (normalizedEmail) duplicateQuery.push({ email: normalizedEmail });
+    if (normalizedPhone) duplicateQuery.push({ phone: normalizedPhone });
+
+    if (duplicateQuery.length) {
+      const existingCustomer = await Customer.findOne({
+        _id: { $ne: id },
+        $or: duplicateQuery,
+      });
+
+      if (existingCustomer) {
+        return res.status(400).json({
+          status: "error",
+          message: "Another customer with this email or phone already exists",
+        });
+      }
+    }
+
+    customer.name = name ?? customer.name;
+    customer.email = normalizedEmail || "";
+    customer.phone = normalizedPhone || customer.phone;
+    customer.gender = gender ?? customer.gender;
+    customer.dob = dob || null;
+    customer.address = address ?? customer.address;
+    customer.city = city ?? customer.city;
+    customer.preferredService = preferredService ?? customer.preferredService;
+    customer.preferredStylist = preferredStylist ?? customer.preferredStylist;
+    customer.notes = notes ?? customer.notes;
+    customer.status = status ?? customer.status;
+
+    await customer.save();
+
+    res.status(200).json({
+      status: "success",
+      message: "Customer updated successfully",
+      data: customer,
+    });
+  } catch (error) {
+    console.error("Update customer error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message || "Failed to update customer",
+    });
+  }
+};
+
+// Delete Customer
+export const deleteCustomer = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const customer = await Customer.findByIdAndDelete(id);
+
+    if (!customer) {
+      return res.status(404).json({
+        status: "error",
+        message: "Customer not found",
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Customer deleted successfully",
+      data: customer,
+    });
+  } catch (error) {
+    console.error("Delete customer error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message || "Failed to delete customer",
+    });
   }
 };
 
@@ -420,24 +812,23 @@ export const createStaff = async (req, res) => {
   try {
     const { name, email, phone, specialization, experience, joinDate, biography } = req.body;
 
-    // Check if staff with this email already exists
-    const existingStaff = await StaffMember.findOne({ email });
+    const existingStaff = await StaffMember.findOne({ email: normalizeEmail(email) });
     if (existingStaff) {
       return res.status(400).json({
         status: "error",
-        message: "Staff member with this email already exists"
+        message: "Staff member with this email already exists",
       });
     }
 
     const staff = new StaffMember({
       name,
-      email,
-      phone,
+      email: normalizeEmail(email),
+      phone: normalizePhone(phone),
       specialization,
       experience,
       joinDate: joinDate ? new Date(joinDate) : new Date(),
       biography,
-      status: "Active"
+      status: "Active",
     });
 
     await staff.save();
@@ -448,7 +839,78 @@ export const createStaff = async (req, res) => {
       data: staff,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Update Staff Member
+export const updateStaff = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, phone, specialization, experience, biography, status } =
+      req.body;
+
+    const staff = await StaffMember.findByIdAndUpdate(
+      id,
+      {
+        name,
+        email: normalizeEmail(email),
+        phone: normalizePhone(phone),
+        specialization,
+        experience,
+        biography,
+        status,
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!staff) {
+      return res.status(404).json({
+        status: "error",
+        message: "Staff member not found",
+      });
+    }
+
+    res.json({
+      status: "success",
+      message: "Staff updated successfully",
+      data: staff,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Delete Staff Member
+export const deleteStaff = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const staff = await StaffMember.findByIdAndDelete(id);
+
+    if (!staff) {
+      return res.status(404).json({
+        status: "error",
+        message: "Staff member not found",
+      });
+    }
+
+    res.json({
+      status: "success",
+      message: "Staff deleted successfully",
+      data: staff,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
@@ -457,23 +919,22 @@ export const createService = async (req, res) => {
   try {
     const { name, description, price, duration, category, image } = req.body;
 
-    // Check if service with this name already exists
     const existingService = await Service.findOne({ name });
     if (existingService) {
       return res.status(400).json({
         status: "error",
-        message: "Service with this name already exists"
+        message: "Service with this name already exists",
       });
     }
 
     const service = new Service({
       name,
       description,
-      price: parseFloat(price),
-      duration: parseInt(duration) || 60,
+      price: parseFloat(price) || 0,
+      duration: parseInt(duration, 10) || 60,
       category,
       image,
-      status: "Active"
+      status: "Active",
     });
 
     await service.save();
@@ -484,6 +945,9 @@ export const createService = async (req, res) => {
       data: service,
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };

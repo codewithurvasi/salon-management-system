@@ -4,6 +4,7 @@ import Appointment from "../models/Appointment.js";
 import Customer from "../models/Customer.js";
 import Service from "../models/Service.js";
 import StaffMember from "../models/StaffMember.js";
+import Admin from "../models/Admin.js";
 
 dotenv.config();
 
@@ -17,7 +18,16 @@ const seedDatabase = async () => {
     await Customer.deleteMany({});
     await Service.deleteMany({});
     await StaffMember.deleteMany({});
+    await Admin.deleteMany({});
     console.log("🗑️  Cleared existing data");
+
+    // Create Admin
+    const admin = await Admin.create({
+      name: "Admin User",
+      email: "admin@salon.com",
+      password: "admin123", // This will be hashed
+    });
+    console.log("✅ Admin created:", admin.email);
 
     // Create Services
     const services = await Service.insertMany([

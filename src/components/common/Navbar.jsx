@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { HiOutlineScissors, HiChevronDown } from "react-icons/hi2";
+import { useAuth } from "../../context/AuthContext";
 
 const navItems = [
   {
@@ -82,6 +83,11 @@ function DesktopDropdown({ item }) {
 
 export default function Navbar() {
   const [openDropdown, setOpenDropdown] = useState(null);
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+  };
 
   return (
     <motion.header
@@ -133,26 +139,49 @@ export default function Navbar() {
           transition={{ delay: 0.5 }}
           className="flex items-center gap-3"
         >
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link
-              to="/dashboard"
-              className="rounded-xl border border-amber-200/50 bg-white/50 px-4 py-2 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-amber-300 hover:bg-amber-50 hover:shadow-lg backdrop-blur-sm"
-            >
-              Dashboard
-            </Link>
-          </motion.div>
+          {user ? (
+            <>
+              <span className="text-sm text-slate-700">Welcome, {user.name}</span>
 
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Link
-              to="/booking"
-              className="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:from-amber-600 hover:to-amber-700 hover:shadow-xl"
-            >
-              Book Now
-            </Link>
-          </motion.div>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Link
+                  to="/booking"
+                  className="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:from-amber-600 hover:to-amber-700 hover:shadow-xl"
+                >
+                  Book Now
+                </Link>
+              </motion.div>
+
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <button
+                  onClick={handleLogout}
+                  className="rounded-xl border border-red-200/50 bg-white/50 px-4 py-2 text-sm font-semibold text-red-700 transition-all duration-300 hover:border-red-300 hover:bg-red-50 hover:shadow-lg backdrop-blur-sm"
+                >
+                  Logout
+                </button>
+              </motion.div>
+            </>
+          ) : (
+            <>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Link
+                  to="/login"
+                  className="rounded-xl border border-amber-200/50 bg-white/50 px-4 py-2 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-amber-300 hover:bg-amber-50 hover:shadow-lg backdrop-blur-sm"
+                >
+                  Login
+                </Link>
+              </motion.div>
+
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Link
+                  to="/booking"
+                  className="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:from-amber-600 hover:to-amber-700 hover:shadow-xl"
+                >
+                  Book Now
+                </Link>
+              </motion.div>
+            </>
+          )}
         </motion.div>
       </div>
     </motion.header>
